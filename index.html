@@ -1,12 +1,98 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
   <meta charset="UTF-8">
+  <!-- モバイルデバイスでの表示を最適化するためのビューポート設定 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>膜振動シミュレーター</title>
-  <script src="p5.js"></script>
+
+  <!-- P5.js ライブラリを読み込む -->
+  <!-- P5.jsの主要な機能を提供します -->
+  <script src="p5.js"></script> 
+  
+  <!-- (もしp5.sound.jsを使っているなら、ここに追加) -->
+  <!-- <script src="p5.sound.js"></script> -->
+
+  <!-- 自分のスケッチファイル (sketch.js) を読み込む -->
+  <!-- sketch.js は、その中でp5.jsの機能を使うため、これよりも後に読み込む必要があります。 -->
   <script src="sketch.js"></script>
+
+  <style>
+    /* 全体のスタイル設定 */
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column; /* 要素を縦に並べる */
+      align-items: center;   /* 水平方向の中央揃え */
+      justify-content: center; /* 垂直方向の中央揃え */
+      min-height: 100vh;     /* ビューポートの高さいっぱいにする */
+      background-color: #1a1a1a; /* 暗い背景色 */
+      font-family: 'Inter', sans-serif; /* フォントの指定 */
+      color: #e0e0e0; /* 文字色 */
+      overflow: hidden; /* スクロールバーが表示されないようにする */
+    }
+    canvas {
+      display: block; /* キャンバスの下に余白ができないようにする */
+      border-radius: 10px; /* 角を丸くする */
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5); /* 緑色の光る影 */
+      margin-bottom: 40px; /* UI要素との間にスペースを設ける */
+    }
+    .controls {
+      display: flex;
+      flex-direction: column; /* コントロール要素を縦に並べる */
+      align-items: flex-start; /* 左寄せ */
+      gap: 10px; /* 要素間のスペース */
+      padding: 20px;
+      background-color: #2a2a2a;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    }
+    .controls p {
+      margin: 0; /* 段落のデフォルトマージンを削除 */
+      font-size: 1.1em;
+    }
+    .controls input[type="range"] {
+      width: 150px;
+      -webkit-appearance: none; /* デフォルトのスタイルを無効化 */
+      height: 8px;
+      background: #444;
+      border-radius: 5px;
+      outline: none;
+      opacity: 0.7;
+      transition: opacity .2s;
+    }
+    .controls input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #0f0; /* 緑色のつまみ */
+      cursor: pointer;
+      box-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+    }
+    .controls button {
+      background-color: #008cba; /* 青色のボタン */
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1.1em;
+      transition: background-color 0.3s ease, transform 0.1s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    .controls button:hover {
+      background-color: #007bb5;
+      transform: translateY(-2px);
+    }
+    .controls button:active {
+      transform: translateY(0);
+    }
+  </style>
 </head>
 <body>
+  <!-- P5.jsキャンバスがここに自動的に追加されます -->
+  <!-- UI要素はP5.jsによって自動的に生成され、HTML要素として追加されます -->
 </body>
 </html>

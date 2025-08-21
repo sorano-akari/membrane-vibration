@@ -1,6 +1,6 @@
 // シミュレーションのグリッドサイズ
-const GRID_WIDTH = 100;
-const GRID_HEIGHT = 100;
+const GRID_WIDTH = 150;
+const GRID_HEIGHT = 150;
 
 // 波の伝播速度の係数（この値を調整して、波の動きを変えてみよう）
 // 安定性を確保するため、0.5以下に設定することが推奨されます。
@@ -22,11 +22,11 @@ const MIN_SLIDER_PULSE_AMPLITUDE = 10;
 
 let FIXED_LOG_MAX; // 色のマッピング基準となる固定の対数スケールの最大値
 
-// パルスが一度加えられたかどうかのフラグ
-let hasPulsed = false; 
+// hasPulsed 変数は削除しました
 
 let pulseStrengthSlider; // パルス強度のスライダー
 let pulseStrengthLabel; // スライダーの値を表示するラベル
+
 
 /**
  * P5.jsの初期設定を行う関数
@@ -54,19 +54,24 @@ function setup() {
       FIXED_LOG_MAX = 1; 
   }
 
-  // リセットボタン
-  let resetButton = createButton('リセット'); // ボタンを作成
-  resetButton.position(width / 2 + 50, height + 20); // キャンバスの右下に配置
-  resetButton.mousePressed(resetSimulation); // クリック時にresetSimulation関数を呼び出す
+  // === UI要素の配置調整 ===
+  const UI_OFFSET_X = 20; // キャンバスからの左オフセット
+  const UI_START_Y = height + 20; // キャンバス下からの開始Y位置
+  const UI_LINE_HEIGHT = 30; // 各UI要素の間の縦方向のスペース
 
   // 強度スライダーのラベル
   pulseStrengthLabel = createP('叩く強さ: ' + DEFAULT_PULSE_AMPLITUDE);
-  pulseStrengthLabel.position(width / 2 - 190, height); // ボタンの左に配置
+  pulseStrengthLabel.position(UI_OFFSET_X, UI_START_Y); 
 
   // 強度スライダー
-  pulseStrengthSlider = createSlider(MIN_SLIDER_PULSE_AMPLITUDE, MAX_SLIDER_PULSE_AMPLITUDE, DEFAULT_PULSE_AMPLITUDE); // スライダーを作成
-  pulseStrengthSlider.position(width / 2 - 190, height + 30); // ラベルの下に配置
-  pulseStrengthSlider.style('width', '150px'); // スライダーの幅を調整
+  pulseStrengthSlider = createSlider(MIN_SLIDER_PULSE_AMPLITUDE, MAX_SLIDER_PULSE_AMPLITUDE, DEFAULT_PULSE_AMPLITUDE);
+  pulseStrengthSlider.position(UI_OFFSET_X, UI_START_Y + UI_LINE_HEIGHT);
+  pulseStrengthSlider.style('width', '150px'); 
+
+  // リセットボタン
+  let resetButton = createButton('リセット'); 
+  resetButton.position(UI_OFFSET_X, UI_START_Y + UI_LINE_HEIGHT * 2); // スライダーのさらに下に配置
+  resetButton.mousePressed(resetSimulation);
 }
 
 /**
@@ -154,10 +159,9 @@ function draw() {
           saturation = map(logVal, 0, FIXED_LOG_MAX, 0, 100);
           saturation = constrain(saturation, 0, 100); // 0-100の範囲に制限
 
-          // === 変更点：明度を対数スケールでマッピング（0から95：真っ暗からより明るい色へ） ===
-          lightness = map(logVal, 0, FIXED_LOG_MAX, 0, 95); // 90に変更
+          // 明度を対数スケールでマッピング（0から95：真っ暗からより明るい色へ）
+          lightness = map(logVal, 0, FIXED_LOG_MAX, 0, 95); 
           lightness = constrain(lightness, 0, 100); // 0-100の範囲に制限
-          // === 変更点ここまで ===
 
           // 変位の符号に応じて色相を設定
           if (val > 0) {
@@ -187,33 +191,35 @@ function draw() {
 
 /**
  * マウスがクリックされたときに呼び出されるP5.jsのイベント関数
- * クリック位置にパルスを生成する（1回限り）
+ * クリック位置にパルスを生成する（新しい計算を開始）
  */
 function mouseClicked() {
-  if (hasPulsed) {
-    return; // 既にパルスが加えられていたら何もしない
-  }
-
-  // マウスのX座標をグリッドの列に変換
+  // クリック可能な領域かを判断するための変数
   let gridX = floor(mouseX / (width / GRID_WIDTH));
-  // マウスのY座標をグリッドの行に変換
   let gridY = floor(mouseY / (height / GRID_HEIGHT));
 
-  // クリック位置が有効なグリッド範囲内か、かつ円の内側かを確認
-  let x_center_dist = gridX - GRID_WIDTH / 2;
-  let y_center_dist = gridY - GRID_HEIGHT / 2;
-  let distance_to_center = sqrt(x_center_dist * x_center_dist + y_center_dist * y_center_dist);
+  let x_center_canvas = map(gridX, 0, GRID_WIDTH, 0, width);
+  let y_center_canvas = map(gridY, 0, GRID_HEIGHT, 0, height);
 
-  if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT && distance_to_center < GRID_WIDTH / 2 - 2) {
+  let x_dist_from_center = x_center_canvas - width / 2;
+  let y_dist_from_center = y_center_canvas - height / 2;
+  let distance_from_center_px = sqrt(x_dist_from_center * x_dist_from_center + y_dist_from_center * y_dist_from_center);
+
+  let max_tap_radius_px = (GRID_WIDTH / 2 - 2) * (width / GRID_WIDTH);
+
+
+  if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT && distance_from_center_px < max_tap_radius_px) {
+    // === 変更点：新しい計算を開始するために、まずシミュレーションをリセット ===
+    resetSimulation(); 
+    // === 変更点ここまで ===
+
     // スライダーの値をパルス強度として使用
     let currentPulseAmplitude = pulseStrengthSlider.value();
     u_current[gridX][gridY] = currentPulseAmplitude;
     
-    // 以前の変位をリセットし、新しいパルスがクリーンに伝播するようにする
-    u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
-
-    // パルスが加えられたことを記録
-    hasPulsed = true; 
+    // hasPulsed フラグはもう使わないため削除
+    // u_previous も resetSimulation でリセットされるため、この行は不要
+    // u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT); 
   }
 }
 
@@ -225,8 +231,9 @@ function resetSimulation() {
   u_current = create2DArray(GRID_WIDTH, GRID_HEIGHT);
   u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
   
+  // hasPulsed フラグはもう使わないため削除
   // パルスがまだ加えられていない状態にリセット
-  hasPulsed = false;
+  // hasPulsed = false; 
 
   // 画面をクリアして背景を黒にする
   background(0);
