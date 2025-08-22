@@ -1,6 +1,6 @@
 // シミュレーションのグリッドサイズ
-const GRID_WIDTH = 150; 
-const GRID_HEIGHT = 150; 
+const GRID_WIDTH = 120; // 150から120に変更
+const GRID_HEIGHT = 120; // 150から120に変更
 
 // 波の伝播速度の係数（この値を調整して、波の動きを変えてみよう）
 // 安定性を確保するため、0.5以下に設定することが推奨されます。
@@ -22,18 +22,18 @@ const MIN_SLIDER_PULSE_AMPLITUDE = 10;
 
 let FIXED_LOG_MAX; // 色のマッピング基準となる固定の対数スケールの最大値
 
-// === 親指（固定点）とシミュレーションの状態管理用の変数 ===
+// === 指（固定点）とシミュレーションの状態管理用の変数 ===
 let currentFixedPoint = null; // {x: gridX, y: gridY} または null
-// 親指で押さえた点の初期変位値（負の値で凹むように）
-let currentThumbPressValue = -100; // 親指で押さえた時の初期変位量
+// 指で押さえた点の初期変位値（負の値で凹むように）
+let currentThumbPressValue = -100; // 指で押さえた時の初期変位量
 
 let simulationState = 'SET_THUMB'; // 'SET_THUMB', 'TAP_MEMBRANE', 'NO_THUMB'
 
 // UI要素の変数
 let pulseStrengthSlider; 
 let pulseStrengthLabel; 
-let thumbPressStrengthSlider; // 親指の強さスライダー
-let thumbPressStrengthLabel;  // 親指の強さラベル
+let thumbPressStrengthSlider; // 指の強さスライダー
+let thumbPressStrengthLabel;  // 指の強さラベル
 let statusMessageLabel; // ユーザーへのメッセージ表示用
 let resetButton;
 let toggleThumbModeButton; // 新しいボタン
@@ -44,9 +44,12 @@ let toggleThumbModeButton; // 新しいボタン
  * キャンバスの作成、色モードの設定、配列の初期化など
  */
 function setup() {
-  // 描画領域を400x400ピクセルで作成（body直下に自動生成される）
+  // 描画領域をグリッドサイズの倍数で作成（例: 120x120グリッドなら240x240ピクセル）
   // .id()でCanvasにIDを付与し、CSSで中央配置できるようにする
-  let canvas = createCanvas(400, 400); 
+  let canvasWidth = GRID_WIDTH * 2;  // 120 * 2 = 240
+  let canvasHeight = GRID_HEIGHT * 2; // 120 * 2 = 240
+
+  let canvas = createCanvas(canvasWidth, canvasHeight); 
   canvas.id('p5canvas'); // IDを付与
 
   pixelDensity(1); // 解像度を一定に保つ（Retinaディスプレイなどでピクセルが2倍になるのを防ぐ）
@@ -66,14 +69,16 @@ function setup() {
   }
 
   // === UI要素の配置調整 (絶対位置指定) ===
-  // Canvasの高さ（400px）＋ Canvasの上下マージン（20px*2）＋ 追加マージン
-  const UI_START_Y = height + 20 + 20 + 20; // Canvasのすぐ下に配置されるように調整
+  // Canvasの高さ（canvasHeight）＋ Canvasの上下マージン（20px*2）＋ 追加マージン
+  const UI_START_Y = canvasHeight + 20 + 20 + 20; // Canvasのすぐ下に配置されるように調整
 
   // Canvasの左端のX座標を取得し、UI要素をCanvasに揃える
   // Canvas要素がDOMに完全に配置された後でないと正確な値が取れない可能性があるので、少し遅延させるか、windowWidth/2 から計算する
   // 今回はbodyのCSSでCanvasを中央揃えにしているので、windowWidth/2 から計算
   const canvasElement = document.getElementById('p5canvas');
-  const UI_OFFSET_X = (window.innerWidth - canvasElement.offsetWidth) / 2; // Canvasの左端に合わせる
+  // Canvasが存在しない場合のフォールバックとして0を使用
+  const canvasOffsetWidth = canvasElement ? canvasElement.offsetWidth : canvasWidth; 
+  const UI_OFFSET_X = (window.innerWidth - canvasOffsetWidth) / 2; // Canvasの左端に合わせる
 
   // 強度スライダーのラベル
   pulseStrengthLabel = createP('叩く強さ: ' + DEFAULT_PULSE_AMPLITUDE);
@@ -84,32 +89,32 @@ function setup() {
   pulseStrengthSlider.position(UI_OFFSET_X, UI_START_Y + 30); // ラベルの下に配置
   pulseStrengthSlider.style('width', '150px'); 
 
-  // 親指の強さスライダーのラベル
-  thumbPressStrengthLabel = createP('親指の押す強さ: ' + abs(currentThumbPressValue)); // 絶対値で表示
+  // 指の強さスライダーのラベル
+  thumbPressStrengthLabel = createP('指で押す強さ: ' + abs(currentThumbPressValue)); // 絶対値で表示
   thumbPressStrengthLabel.position(UI_OFFSET_X, UI_START_Y + 70); // 叩く強さスライダーの下に配置
 
-  // 親指の強さスライダー
+  // 指の強さスライダー
   thumbPressStrengthSlider = createSlider(10, 200, abs(currentThumbPressValue)); // 10から200の範囲で設定可能（絶対値）
-  thumbPressStrengthSlider.position(UI_OFFSET_X, UI_START_Y + 100); // 親指ラベルの下に配置
+  thumbPressStrengthSlider.position(UI_OFFSET_X, UI_START_Y + 100); // 指ラベルの下に配置
   thumbPressStrengthSlider.style('width', '150px');
-  // スライダーの値が変更されたら親指の変位を更新
+  // スライダーの値が変更されたら指の変位を更新
   thumbPressStrengthSlider.input(updateThumbPressValue);
 
 
   // リセットボタン
   resetButton = createButton('シミュレーションをリセット'); 
-  resetButton.position(UI_OFFSET_X, UI_START_Y + 140); // 親指スライダーの下に配置
+  resetButton.position(UI_OFFSET_X, UI_START_Y + 140); // 指スライダーの下に配置
 
   resetButton.mousePressed(resetSimulation);
 
-  // 新しいボタン: 親指モード切り替え
-  toggleThumbModeButton = createButton('親指モード切替');
+  // 新しいボタン: 指モード切り替え
+  toggleThumbModeButton = createButton('指モード切替');
   toggleThumbModeButton.position(UI_OFFSET_X, UI_START_Y + 180); // リセットボタンの下に配置
   toggleThumbModeButton.mousePressed(toggleThumbMode);
 
   // ステータスメッセージラベル
   statusMessageLabel = createP(''); // 初期メッセージはresetSimulationで設定
-  statusMessageLabel.position(UI_OFFSET_X, UI_START_Y + 220); // 親指モード切替ボタンの下に配置
+  statusMessageLabel.position(UI_OFFSET_X, UI_START_Y + 220); // 指モード切替ボタンの下に配置
   statusMessageLabel.style('color', '#FFD700'); // 目立つ色に
 
   // シミュレーションを初期化 (statusMessageLabelが初期化された後に呼び出す)
@@ -117,14 +122,14 @@ function setup() {
 }
 
 /**
- * 親指の強さスライダーの値が変更されたときに呼び出される関数
+ * 指の強さスライダーの値が変更されたときに呼び出される関数
  */
 function updateThumbPressValue() {
-    // スライダーの値は正の数なので、親指が凹むように負の数にする
+    // スライダーの値は正の数なので、指が凹むように負の数にする
     currentThumbPressValue = -thumbPressStrengthSlider.value();
-    thumbPressStrengthLabel.html('親指の押す強さ: ' + abs(currentThumbPressValue));
+    thumbPressStrengthLabel.html('指で押す強さ: ' + abs(currentThumbPressValue));
 
-    // 親指モードで、すでに親指が設定されている場合は、即座に膜の変位を更新
+    // 指モードで、すでに指が設定されている場合は、即座に膜の変位を更新
     if (simulationState === 'TAP_MEMBRANE' && currentFixedPoint) {
         setInitialStaticDeformation(); // 静的変形を再計算
     }
@@ -155,7 +160,7 @@ function draw() {
 
       // 距離が指定した半径より小さい場合のみ計算を行う
       if (distance < GRID_WIDTH / 2 - 2) { // GRID_WIDTH / 2 - 2 はシミュレーション空間の半径
-        // 親指の固定点の場合は計算をスキップし、後で強制的に変位を設定する
+        // 指の固定点の場合は計算をスキップし、後で強制的に変位を設定する
         if (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y) {
             u_next[i][j] = currentThumbPressValue; // ここでは仮の値、drawの最後で再度固定
             continue; // この点の通常の物理計算はスキップ
@@ -183,7 +188,7 @@ function draw() {
   u_current = u_next;
 
   // === 固定点がある場合、その変位を強制的にcurrentThumbPressValueに固定する ===
-  // これにより、親指で押さえられた点がその変位を維持し、そこから波が伝播する
+  // これにより、指で押さえられた点がその変位を維持し、そこから波が伝播する
   if (currentFixedPoint) {
     u_current[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
     u_previous[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue; // 以前の変位も固定することで、安定した波を生成
@@ -214,7 +219,7 @@ function draw() {
       // 円の内側にあるグリッドセルのみ、色を計算して描画
       if (distance_to_center < GRID_WIDTH / 2 - 2) {
           let val = u_current[i][j];    // 現在のグリッド点の変位
-          // 親指の変位を基準に相対的な変位の絶対値を取る
+          // 指の変位を基準に相対的な変位の絶対値を取る
           let displayVal = abs(val - (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y ? currentThumbPressValue : 0));
           
           // 変位の絶対値を対数スケールに変換
@@ -257,20 +262,20 @@ function draw() {
   let boundaryRadius = (GRID_WIDTH / 2 - 2) * cellWidth; 
   circle(width / 2, height / 2, boundaryRadius * 2); // circle関数は直径を取るため * 2
 
-  // === 親指（固定点）の視覚的な表示 ===
+  // === 指（固定点）の視覚的な表示 ===
   if (currentFixedPoint) {
     let px_x = currentFixedPoint.x * cellWidth + cellWidth / 2;
     let px_y = currentFixedPoint.y * cellHeight + cellHeight / 2;
-    fill(0, 100, 50); // 親指は赤く表示 (HSL: 色相0=赤、彩度100、明度50)
+    fill(0, 100, 50); // 指は赤く表示 (HSL: 色相0=赤、彩度100、明度50)
     noStroke();
     circle(px_x, px_y, cellWidth * 0.7); // 少し小さめの円で表示
   }
-  // === 親指の表示ここまで ===
+  // === 指の表示ここまで ===
 }
 
 /**
  * マウスがクリックされたときに呼び出されるP5.jsのイベント関数
- * クリック位置に基づいて親指の設定または波の生成を行う
+ * クリック位置に基づいて指の設定または波の生成を行う
  */
 function mouseClicked() {
   // クリック可能な領域かを判断するための変数
@@ -289,19 +294,19 @@ function mouseClicked() {
 
   if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT && distance_from_center_px < max_tap_radius_px) {
     if (simulationState === 'SET_THUMB') {
-      // 親指の位置を設定
+      // 指の位置を設定
       currentFixedPoint = {x: gridX, y: gridY};
       simulationState = 'TAP_MEMBRANE';
       
-      // 親指設定後、膜を静止状態から親指で押された初期変形状態に設定
+      // 指設定後、膜を静止状態から指で押された初期変形状態に設定
       setInitialStaticDeformation(); 
-      statusMessageLabel.html(`親指の位置を設定しました: (${gridX}, ${gridY})。膜をタップして振動させてください。`);
+      statusMessageLabel.html(`指の位置を設定しました: (${gridX}, ${gridY})。膜をタップして振動させてください。`);
     } else if (simulationState === 'TAP_MEMBRANE') {
-      // 親指の位置が設定済みの場合、膜を叩く
-      // 親指が押さえられている点を叩いた場合は、振動は開始しないがメッセージは出す
+      // 指の位置が設定済みの場合、膜を叩く
+      // 指が押さえられている点を叩いた場合は、振動は開始しないがメッセージは出す
       if (currentFixedPoint && gridX === currentFixedPoint.x && gridY === currentFixedPoint.y) {
-        statusMessageLabel.html(`親指の位置 (${currentFixedPoint.x}, ${currentFixedPoint.y}) は固定されています。他の場所を叩いてください。`);
-        return; // 親指の場所を叩いても波は発生させない
+        statusMessageLabel.html(`指の位置 (${currentFixedPoint.x}, ${currentFixedPoint.y}) は固定されています。他の場所を叩いてください。`);
+        return; // 指の場所を叩いても波は発生させない
       }
 
       // 既存の波をリセットせず、現在の変位にパルスを加算する
@@ -312,68 +317,70 @@ function mouseClicked() {
 
       statusMessageLabel.html(`膜を叩きました: (${gridX}, ${gridY})。`);
     } else if (simulationState === 'NO_THUMB') {
-        // 親指モードではない場合、常に新しいパルスを生成する
-        clearCurrentWaves(); // 親指なしの状態にリセット（全点が0のまま）
+        // 指モードではない場合、常に新しいパルスを生成する
+        // clearCurrentWaves(); // 指なしの状態にリセット（全点が0のまま）
         let currentPulseAmplitude = pulseStrengthSlider.value();
-        u_current[gridX][gridY] = currentPulseAmplitude;
-        statusMessageLabel.html(`膜を叩きました: (${gridX}, ${gridY})。親指モードを切り替えるには「親指モード切替」ボタンを押してください。`);
+        u_current[gridX][gridY] += currentPulseAmplitude; // 既存の変位に加算
+        // 変位が過度に大きくなりすぎないように制限
+        u_current[gridX][gridY] = constrain(u_current[gridX][gridY], -MAX_SLIDER_PULSE_AMPLITUDE * 2, MAX_SLIDER_PULSE_AMPLITUDE * 2); 
+        statusMessageLabel.html(`膜を叩きました: (${gridX}, ${gridY})。指モードを切り替えるには「指モード切替」ボタンを押してください。`);
     }
   }
 }
 
 /**
- * 親指モードを切り替える関数
+ * 指モードを切り替える関数
  */
 function toggleThumbMode() {
     if (simulationState === 'NO_THUMB') {
-        // 現在親指なしモードなら、親指設定モードに戻す
+        // 現在指なしモードなら、指設定モードに戻す
         resetSimulation(); // 完全リセットし、SET_THUMBに戻る
     } else {
-        // 現在親指設定済みモードまたは親指設定モードなら、親指なしモードにする
-        currentFixedPoint = null; // 親指を解除
+        // 現在指設定済みモードまたは指設定モードなら、指なしモードにする
+        currentFixedPoint = null; // 指を解除
         simulationState = 'NO_THUMB'; // モードを切り替える
-        // 親指を解除した状態なので、完全にクリアする
+        // 指を解除した状態なので、完全にクリアする
         u_current = create2DArray(GRID_WIDTH, GRID_HEIGHT);
         u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
         background(0); // 画面もクリア
-        statusMessageLabel.html('親指モードOFF。膜をタップして振動させてください。');
+        statusMessageLabel.html('指モードOFF。膜をタップして振動させてください。');
     }
 }
 
 /**
- * シミュレーションの状態を完全にリセットする関数（親指の位置もリセット）
- * 初期状態（親指を設定するモード）に戻る
+ * シミュレーションの状態を完全にリセットする関数（指の位置もリセット）
+ * 初期状態（指を設定するモード）に戻る
  */
 function resetSimulation() {
   // 2次元配列を初期化
   u_current = create2DArray(GRID_WIDTH, GRID_HEIGHT);
   u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
   
-  currentFixedPoint = null; // 親指の位置もクリア
+  currentFixedPoint = null; // 指の位置もクリア
   simulationState = 'SET_THUMB'; // 状態を初期モードに戻す
   
   // 画面をクリアして背景を黒にする
   background(0);
   // statusMessageLabel が undefined の場合は、メッセージを設定しないようにする
   if (statusMessageLabel) { 
-    statusMessageLabel.html('シミュレーションをリセットしました。親指の位置を設定してください。');
+    statusMessageLabel.html('シミュレーションをリセットしました。指の位置を設定してください。');
   }
 }
 
 /**
- * 現在の波をクリアし、初期静的変形状態（親指が押さえている場合はその形）に戻す関数
- * (TAP_MEMBRANEモードで親指の変形状態は維持しつつ波だけをリセットする場合に使用)
+ * 現在の波をクリアし、初期静的変形状態（指が押さえている場合はその形）に戻す関数
+ * (TAP_MEMBRANEモードで指の変形状態は維持しつつ波だけをリセットする場合に使用)
  */
 function clearCurrentWaves() {
     // 2次元配列を初期化
     u_current = create2DArray(GRID_WIDTH, GRID_HEIGHT);
     u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
 
-    // 親指が設定されている場合は、その初期静的変形状態を計算して適用
+    // 指が設定されている場合は、その初期静的変形状態を計算して適用
     if (currentFixedPoint) {
         setInitialStaticDeformation();
     } else {
-        // 親指が設定されていない場合は、すべて0に初期化
+        // 指が設定されていない場合は、すべて0に初期化
         // （create2DArrayで既に0になっているため、ここでは特に何もする必要はない）
     }
     // 画面をクリアして背景を黒にする
@@ -381,7 +388,7 @@ function clearCurrentWaves() {
 }
 
 /**
- * 親指で押さえられた状態の初期静的変位を計算し、膜に適用する関数
+ * 指で押さえられた状態の初期静的変位を計算し、膜に適用する関数
  * (緩和法を用いて滑らかな変形を生成)
  */
 function setInitialStaticDeformation() {
@@ -389,7 +396,7 @@ function setInitialStaticDeformation() {
     u_current = create2DArray(GRID_WIDTH, GRID_HEIGHT);
     u_previous = create2DArray(GRID_WIDTH, GRID_HEIGHT);
 
-    // 親指の固定点が存在する場合のみ処理
+    // 指の固定点が存在する場合のみ処理
     if (currentFixedPoint) {
         u_current[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
         u_previous[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
@@ -406,10 +413,10 @@ function setInitialStaticDeformation() {
                 let y_center_dist = j - GRID_HEIGHT / 2;
                 let distance_to_boundary = sqrt(x_center_dist * x_center_dist + y_center_dist * y_center_dist);
 
-                // 円形境界の内側かつ、親指の固定点ではない場合のみ緩和計算を行う
+                // 円形境界の内側かつ、指の固定点ではない場合のみ緩和計算を行う
                 if (distance_to_boundary < GRID_WIDTH / 2 - 2) { 
                     if (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y) {
-                        temp_u[i][j] = currentThumbPressValue; // 親指の点は常に固定
+                        temp_u[i][j] = currentThumbPressValue; // 指の点は常に固定
                     } else {
                         // 周囲4点の平均を取る（単純な緩和法）
                         let sumNeighbors = 0;
