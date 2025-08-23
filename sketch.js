@@ -18,8 +18,6 @@ let dynamicFingerPressRadius = MIN_DYNAMIC_PRESS_RADIUS; // 動的に変わる�
 // 膜を叩く範囲の半径（グリッドセル単位）の最小値と最大値
 const MIN_DYNAMIC_PULSE_RADIUS = 1; // 弱い力で叩いたときの半径
 const MAX_DYNAMIC_PULSE_RADIUS = 5; // 強い力で叩いたときの半径
-// dynamicPulseRadiusはmouseClicked内で計算するため、ここでは初期値のみ定義
-// let dynamicPulseRadius = MIN_DYNAMIC_PULSE_RADIUS; // 動的に変わる叩く範囲の半径
 
 // 膜の変位（高さ）を格納する2次元配列
 let u_current;  // 現在の時刻の変位
@@ -370,6 +368,19 @@ function mouseClicked() {
 }
 
 /**
+ * P5.jsのタッチ終了イベント関数
+ * タッチされたときにmouseClickedと同じロジックを実行する
+ */
+function touchEnded() {
+  // mouseClickedと同じロジックを実行
+  // p5.jsはtouchEnded時にもmouseX, mouseYを更新してくれる
+  mouseClicked();
+  // デフォルトのブラウザスクロールなどの挙動を抑止
+  return false; 
+}
+
+
+/**
  * 指モードを切り替える関数
  */
 function toggleThumbMode() {
@@ -450,48 +461,10 @@ function setInitialStaticDeformation() {
             }
         }
     }
-
-    const RELAXATION_ITERATIONS = 300; // 緩和計算の繰り返し回数。大きいほど滑らかになるが重くなる。
-
-    for (let iter = 0; iter < RELAXATION_ITERATIONS; iter++) {
-        let temp_u = create2DArray(GRID_WIDTH, GRID_HEIGHT); // 次のイテレーション用の一時配列
-
-        for (let i = 0; i < GRID_WIDTH; i++) {
-            for (let j = 0; j < GRID_HEIGHT; j++) {
-                let x_center_dist = i - GRID_WIDTH / 2;
-                let y_center_dist = j - GRID_HEIGHT / 2;
-                let distance_to_boundary = sqrt(x_center_dist * x_center_dist + y_center_dist * y_center_dist);
-
-                // 円形境界の内側かつ、指の固定範囲ではない場合のみ緩和計算を行う
-                if (distance_to_boundary < GRID_WIDTH / 2 - 2) { 
-                    if (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
-                        temp_u[i][j] = currentThumbPressValue; // 指の押さえ範囲内は常に固定
-                    } else {
-                        // 周囲4点の平均を取る（単純な緩和法）
-                        let sumNeighbors = 0;
-                        let countNeighbors = 0;
-                        // 境界チェックをしつつ、隣接点の値を加算
-                        if (i > 0) { sumNeighbors += u_current[i-1][j]; countNeighbors++; }
-                        if (i < GRID_WIDTH - 1) { sumNeighbors += u_current[i+1][j]; countNeighbors++; }
-                        if (j > 0) { sumNeighbors += u_current[i][j-1]; countNeighbors++; }
-                        if (j < GRID_HEIGHT - 1) { sumNeighbors += u_current[i][j+1]; countNeighbors++; }
-                        
-                        if (countNeighbors > 0) {
-                            temp_u[i][j] = sumNeighbors / countNeighbors;
-                        } else {
-                            // 隣接点がない（角など）場合は現在の値を維持（実際にはほとんど起こらない）
-                            temp_u[i][j] = u_current[i][j]; 
-                        }
-                    }
-                } else {
-                    temp_u[i][j] = 0; // 円形境界の外側は常に0
-                }
-            }
-        }
-        u_current = temp_u; // 計算結果をu_currentに反映
-    }
-    // u_previousも同じ初期静止状態に設定し、初期速度をゼロにする
-    u_previous = JSON.parse(JSON.stringify(u_current)); // ディープコピー
+    // 指で押さえた時の初期変位は、緩和計算をせずに直接設定し、
+    // その後の時間発展はdrawループの波動方程式に任せることで、
+    // ゆっくりとした変位の広がりを再現する。
+    // そのため、以前あった緩和計算のループは削除。
 }
 
 
