@@ -1,6 +1,6 @@
 // シミュレーションのグリッドサイズ
-const GRID_WIDTH = 120; // 150から120に変更
-const GRID_HEIGHT = 120; // 150から120に変更
+const GRID_WIDTH = 120; 
+const GRID_HEIGHT = 120; 
 
 // 波の伝播速度の係数（この値を調整して、波の動きを変えてみよう）
 // 安定性を確保するため、0.5以下に設定することが推奨されます。
@@ -9,6 +9,17 @@ const C_SQUARED = 0.45;
 // 減衰係数（0.0〜1.0の範囲、1.0に近いほど減衰が少ない）
 // 0.995付近が、減衰と反射の両方を視認しやすい値です。
 const DAMPING = 0.995;
+
+// 指が膜を押さえる範囲の半径（グリッドセル単位）の最小値と最大値
+const MIN_DYNAMIC_PRESS_RADIUS = 1; // 弱い力で押したときの半径
+const MAX_DYNAMIC_PRESS_RADIUS = 7; // 強い力で押したときの半径
+let dynamicFingerPressRadius = MIN_DYNAMIC_PRESS_RADIUS; // 動的に変わる指の押さえ半径
+
+// 膜を叩く範囲の半径（グリッドセル単位）の最小値と最大値
+const MIN_DYNAMIC_PULSE_RADIUS = 1; // 弱い力で叩いたときの半径
+const MAX_DYNAMIC_PULSE_RADIUS = 5; // 強い力で叩いたときの半径
+// dynamicPulseRadiusはmouseClicked内で計算するため、ここでは初期値のみ定義
+// let dynamicPulseRadius = MIN_DYNAMIC_PULSE_RADIUS; // 動的に変わる叩く範囲の半径
 
 // 膜の変位（高さ）を格納する2次元配列
 let u_current;  // 現在の時刻の変位
@@ -23,7 +34,7 @@ const MIN_SLIDER_PULSE_AMPLITUDE = 10;
 let FIXED_LOG_MAX; // 色のマッピング基準となる固定の対数スケールの最大値
 
 // === 指（固定点）とシミュレーションの状態管理用の変数 ===
-let currentFixedPoint = null; // {x: gridX, y: gridY} または null
+let currentFixedPoint = null; // {x: gridX, y: gridY} または null (押さえの中心点)
 // 指で押さえた点の初期変位値（負の値で凹むように）
 let currentThumbPressValue = -100; // 指で押さえた時の初期変位量
 
@@ -68,54 +79,54 @@ function setup() {
       FIXED_LOG_MAX = 1; 
   }
 
-  // === UI要素の配置調整 (絶対位置指定) ===
+  // === UI要素の作成と初期配置 ===
   // Canvasの高さ（canvasHeight）＋ Canvasの上下マージン（20px*2）＋ 追加マージン
-  const UI_START_Y = canvasHeight + 20 + 20 + 20; // Canvasのすぐ下に配置されるように調整
-
-  // Canvasの左端のX座標を取得し、UI要素をCanvasに揃える
-  // Canvas要素がDOMに完全に配置された後でないと正確な値が取れない可能性があるので、少し遅延させるか、windowWidth/2 から計算する
-  // 今回はbodyのCSSでCanvasを中央揃えにしているので、windowWidth/2 から計算
-  const canvasElement = document.getElementById('p5canvas');
-  // Canvasが存在しない場合のフォールバックとして0を使用
-  const canvasOffsetWidth = canvasElement ? canvasElement.offsetWidth : canvasWidth; 
-  const UI_OFFSET_X = (window.innerWidth - canvasOffsetWidth) / 2; // Canvasの左端に合わせる
+  const UI_INITIAL_Y_OFFSET = canvasHeight + 20 + 20 + 20; 
+  let currentUIY = UI_INITIAL_Y_OFFSET;
 
   // 強度スライダーのラベル
   pulseStrengthLabel = createP('叩く強さ: ' + DEFAULT_PULSE_AMPLITUDE);
-  pulseStrengthLabel.position(UI_OFFSET_X, UI_START_Y); 
+  // UI要素の幅を取得して中央寄せのX座標を計算
+  pulseStrengthLabel.position((window.innerWidth - pulseStrengthLabel.elt.offsetWidth) / 2, currentUIY); 
+  currentUIY += pulseStrengthLabel.elt.offsetHeight + 5; // 次の要素のY座標を更新
 
   // 強度スライダー
   pulseStrengthSlider = createSlider(MIN_SLIDER_PULSE_AMPLITUDE, MAX_SLIDER_PULSE_AMPLITUDE, DEFAULT_PULSE_AMPLITUDE);
-  pulseStrengthSlider.position(UI_OFFSET_X, UI_START_Y + 30); // ラベルの下に配置
   pulseStrengthSlider.style('width', '150px'); 
+  pulseStrengthSlider.position((window.innerWidth - pulseStrengthSlider.elt.offsetWidth) / 2, currentUIY); 
+  currentUIY += pulseStrengthSlider.elt.offsetHeight + 15; // 次の要素のY座標を更新
 
   // 指の強さスライダーのラベル
   thumbPressStrengthLabel = createP('指で押す強さ: ' + abs(currentThumbPressValue)); // 絶対値で表示
-  thumbPressStrengthLabel.position(UI_OFFSET_X, UI_START_Y + 70); // 叩く強さスライダーの下に配置
+  thumbPressStrengthLabel.position((window.innerWidth - thumbPressStrengthLabel.elt.offsetWidth) / 2, currentUIY); 
+  currentUIY += thumbPressStrengthLabel.elt.offsetHeight + 5; // 次の要素のY座標を更新
 
   // 指の強さスライダー
   thumbPressStrengthSlider = createSlider(10, 200, abs(currentThumbPressValue)); // 10から200の範囲で設定可能（絶対値）
-  thumbPressStrengthSlider.position(UI_OFFSET_X, UI_START_Y + 100); // 指ラベルの下に配置
   thumbPressStrengthSlider.style('width', '150px');
-  // スライダーの値が変更されたら指の変位を更新
+  thumbPressStrengthSlider.position((window.innerWidth - thumbPressStrengthSlider.elt.offsetWidth) / 2, currentUIY); 
   thumbPressStrengthSlider.input(updateThumbPressValue);
+  currentUIY += thumbPressStrengthSlider.elt.offsetHeight + 15; // 次の要素のY座標を更新
 
+  // 初回ロード時に動的な指の半径を計算
+  dynamicFingerPressRadius = round(map(abs(currentThumbPressValue), float(thumbPressStrengthSlider.elt.min), float(thumbPressStrengthSlider.elt.max), MIN_DYNAMIC_PRESS_RADIUS, MAX_DYNAMIC_PRESS_RADIUS));
 
   // リセットボタン
   resetButton = createButton('シミュレーションをリセット'); 
-  resetButton.position(UI_OFFSET_X, UI_START_Y + 140); // 指スライダーの下に配置
-
+  resetButton.position((window.innerWidth - resetButton.elt.offsetWidth) / 2, currentUIY); 
   resetButton.mousePressed(resetSimulation);
+  currentUIY += resetButton.elt.offsetHeight + 10; // 次の要素のY座標を更新
 
   // 新しいボタン: 指モード切り替え
   toggleThumbModeButton = createButton('指モード切替');
-  toggleThumbModeButton.position(UI_OFFSET_X, UI_START_Y + 180); // リセットボタンの下に配置
+  toggleThumbModeButton.position((window.innerWidth - toggleThumbModeButton.elt.offsetWidth) / 2, currentUIY); 
   toggleThumbModeButton.mousePressed(toggleThumbMode);
+  currentUIY += toggleThumbModeButton.elt.offsetHeight + 10; // 次の要素のY座標を更新
 
   // ステータスメッセージラベル
   statusMessageLabel = createP(''); // 初期メッセージはresetSimulationで設定
-  statusMessageLabel.position(UI_OFFSET_X, UI_START_Y + 220); // 指モード切替ボタンの下に配置
   statusMessageLabel.style('color', '#FFD700'); // 目立つ色に
+  statusMessageLabel.position((window.innerWidth - statusMessageLabel.elt.offsetWidth) / 2, currentUIY); 
 
   // シミュレーションを初期化 (statusMessageLabelが初期化された後に呼び出す)
   resetSimulation(); 
@@ -128,6 +139,12 @@ function updateThumbPressValue() {
     // スライダーの値は正の数なので、指が凹むように負の数にする
     currentThumbPressValue = -thumbPressStrengthSlider.value();
     thumbPressStrengthLabel.html('指で押す強さ: ' + abs(currentThumbPressValue));
+    // UI要素を中央寄せするため、位置も更新
+    thumbPressStrengthLabel.position((window.innerWidth - thumbPressStrengthLabel.elt.offsetWidth) / 2, thumbPressStrengthLabel.y);
+
+
+    // スライダーの値に基づいて動的な指の押さえ半径を計算
+    dynamicFingerPressRadius = round(map(abs(currentThumbPressValue), float(thumbPressStrengthSlider.elt.min), float(thumbPressStrengthSlider.elt.max), MIN_DYNAMIC_PRESS_RADIUS, MAX_DYNAMIC_PRESS_RADIUS));
 
     // 指モードで、すでに指が設定されている場合は、即座に膜の変位を更新
     if (simulationState === 'TAP_MEMBRANE' && currentFixedPoint) {
@@ -145,6 +162,9 @@ function draw() {
 
   // スライダーの現在の値をラベルに表示
   pulseStrengthLabel.html('叩く強さ: ' + pulseStrengthSlider.value());
+  // UI要素を中央寄せするため、位置も更新
+  pulseStrengthLabel.position((window.innerWidth - pulseStrengthLabel.elt.offsetWidth) / 2, pulseStrengthLabel.y);
+
 
   // 次の時刻の変位を格納する一時的な配列を初期化
   let u_next = create2DArray(GRID_WIDTH, GRID_HEIGHT);
@@ -160,8 +180,8 @@ function draw() {
 
       // 距離が指定した半径より小さい場合のみ計算を行う
       if (distance < GRID_WIDTH / 2 - 2) { // GRID_WIDTH / 2 - 2 はシミュレーション空間の半径
-        // 指の固定点の場合は計算をスキップし、後で強制的に変位を設定する
-        if (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y) {
+        // 指の押さえ範囲内の場合は計算をスキップし、後で強制的に変位を設定する
+        if (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
             u_next[i][j] = currentThumbPressValue; // ここでは仮の値、drawの最後で再度固定
             continue; // この点の通常の物理計算はスキップ
         }
@@ -190,8 +210,14 @@ function draw() {
   // === 固定点がある場合、その変位を強制的にcurrentThumbPressValueに固定する ===
   // これにより、指で押さえられた点がその変位を維持し、そこから波が伝播する
   if (currentFixedPoint) {
-    u_current[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
-    u_previous[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue; // 以前の変位も固定することで、安定した波を生成
+    for (let i = max(0, currentFixedPoint.x - dynamicFingerPressRadius); i < min(GRID_WIDTH, currentFixedPoint.x + dynamicFingerPressRadius + 1); i++) {
+        for (let j = max(0, currentFixedPoint.y - dynamicFingerPressRadius); j < min(GRID_HEIGHT, currentFixedPoint.y + dynamicFingerPressRadius + 1); j++) {
+            if (dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
+                u_current[i][j] = currentThumbPressValue;
+                u_previous[i][j] = currentThumbPressValue; // 以前の変位も固定することで、安定した波を生成
+            }
+        }
+    }
   }
   // === 固定点処理ここまで ===
 
@@ -220,10 +246,8 @@ function draw() {
       if (distance_to_center < GRID_WIDTH / 2 - 2) {
           let val = u_current[i][j];    // 現在のグリッド点の変位
           // 指の変位を基準に相対的な変位の絶対値を取る
-          let displayVal = abs(val - (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y ? currentThumbPressValue : 0));
+          let displayVal = abs(val - (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius ? currentThumbPressValue : 0));
           
-          // 変位の絶対値を対数スケールに変換
-          // log(0)を避けるため +1 する
           let logVal = log(displayVal + 1);
           
           let hue = 0;      // 色相
@@ -239,9 +263,9 @@ function draw() {
           lightness = constrain(lightness, 0, 100); // 0-100の範囲に制限
           
           // 変位の符号に応じて色相を設定
-          if (val > (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y ? currentThumbPressValue : 0)) {
+          if (val > (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius ? currentThumbPressValue : 0)) {
               hue = 0; // 正の変位は赤（Hue 0）
-          } else if (val < (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y ? currentThumbPressValue : 0)) {
+          } else if (val < (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius ? currentThumbPressValue : 0)) {
               hue = 240; // 負の変位は青（Hue 240）
           } else {
               // 変位が完全にゼロの場合
@@ -266,9 +290,9 @@ function draw() {
   if (currentFixedPoint) {
     let px_x = currentFixedPoint.x * cellWidth + cellWidth / 2;
     let px_y = currentFixedPoint.y * cellHeight + cellHeight / 2;
-    fill(0, 100, 50); // 指は赤く表示 (HSL: 色相0=赤、彩度100、明度50)
+    fill(120, 100, 50, 80); // 指は半透明の緑で表示 (HSL: 色相120=緑、彩度100、明度50、透明度80)
     noStroke();
-    circle(px_x, px_y, cellWidth * 0.7); // 少し小さめの円で表示
+    circle(px_x, px_y, (dynamicFingerPressRadius * 2 + 1) * cellWidth * 0.7); // 指の押さえ範囲を反映した円で表示
   }
   // === 指の表示ここまで ===
 }
@@ -303,26 +327,43 @@ function mouseClicked() {
       statusMessageLabel.html(`指の位置を設定しました: (${gridX}, ${gridY})。膜をタップして振動させてください。`);
     } else if (simulationState === 'TAP_MEMBRANE') {
       // 指の位置が設定済みの場合、膜を叩く
-      // 指が押さえられている点を叩いた場合は、振動は開始しないがメッセージは出す
-      if (currentFixedPoint && gridX === currentFixedPoint.x && gridY === currentFixedPoint.y) {
-        statusMessageLabel.html(`指の位置 (${currentFixedPoint.x}, ${currentFixedPoint.y}) は固定されています。他の場所を叩いてください。`);
+      // 指が押さえられている範囲を叩いた場合は、振動は開始しないがメッセージは出す
+      if (currentFixedPoint && dist(gridX, gridY, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
+        statusMessageLabel.html(`指の固定点内 (${currentFixedPoint.x}, ${currentFixedPoint.y}) は固定されています。他の場所を叩いてください。`);
         return; // 指の場所を叩いても波は発生させない
       }
 
-      // 既存の波をリセットせず、現在の変位にパルスを加算する
+      // 叩く強さに応じて動的な叩く範囲を計算
       let currentPulseAmplitude = pulseStrengthSlider.value();
-      u_current[gridX][gridY] += currentPulseAmplitude; // 既存の変位に加算
-      // 変位が過度に大きくなりすぎないように制限
-      u_current[gridX][gridY] = constrain(u_current[gridX][gridY], -MAX_SLIDER_PULSE_AMPLITUDE * 2, MAX_SLIDER_PULSE_AMPLITUDE * 2); 
+      let dynamicPulseRadius = round(map(currentPulseAmplitude, float(pulseStrengthSlider.elt.min), float(pulseStrengthSlider.elt.max), MIN_DYNAMIC_PULSE_RADIUS, MAX_DYNAMIC_PULSE_RADIUS));
+
+      // 叩かれた範囲に変位を加算
+      for (let i = max(0, gridX - dynamicPulseRadius); i < min(GRID_WIDTH, gridX + dynamicPulseRadius + 1); i++) {
+          for (let j = max(0, gridY - dynamicPulseRadius); j < min(GRID_HEIGHT, gridY + dynamicPulseRadius + 1); j++) {
+              if (dist(i, j, gridX, gridY) <= dynamicPulseRadius) {
+                  u_current[i][j] += currentPulseAmplitude;
+                  // 変位が過度に大きくなりすぎないように制限
+                  u_current[i][j] = constrain(u_current[i][j], -MAX_SLIDER_PULSE_AMPLITUDE * 2, MAX_SLIDER_PULSE_AMPLITUDE * 2); 
+              }
+          }
+      }
 
       statusMessageLabel.html(`膜を叩きました: (${gridX}, ${gridY})。`);
     } else if (simulationState === 'NO_THUMB') {
         // 指モードではない場合、常に新しいパルスを生成する
-        // clearCurrentWaves(); // 指なしの状態にリセット（全点が0のまま）
         let currentPulseAmplitude = pulseStrengthSlider.value();
-        u_current[gridX][gridY] += currentPulseAmplitude; // 既存の変位に加算
-        // 変位が過度に大きくなりすぎないように制限
-        u_current[gridX][gridY] = constrain(u_current[gridX][gridY], -MAX_SLIDER_PULSE_AMPLITUDE * 2, MAX_SLIDER_PULSE_AMPLITUDE * 2); 
+        let dynamicPulseRadius = round(map(currentPulseAmplitude, float(pulseStrengthSlider.elt.min), float(pulseStrengthSlider.elt.max), MIN_DYNAMIC_PULSE_RADIUS, MAX_DYNAMIC_PULSE_RADIUS));
+
+        // 叩かれた範囲に変位を加算
+        for (let i = max(0, gridX - dynamicPulseRadius); i < min(GRID_WIDTH, gridX + dynamicPulseRadius + 1); i++) {
+            for (let j = max(0, gridY - dynamicPulseRadius); j < min(GRID_HEIGHT, gridY + dynamicPulseRadius + 1); j++) {
+                if (dist(i, j, gridX, gridY) <= dynamicPulseRadius) {
+                    u_current[i][j] += currentPulseAmplitude;
+                    // 変位が過度に大きくなりすぎないように制限
+                    u_current[i][j] = constrain(u_current[i][j], -MAX_SLIDER_PULSE_AMPLITUDE * 2, MAX_SLIDER_PULSE_AMPLITUDE * 2); 
+                }
+            }
+        }
         statusMessageLabel.html(`膜を叩きました: (${gridX}, ${gridY})。指モードを切り替えるには「指モード切替」ボタンを押してください。`);
     }
   }
@@ -398,8 +439,16 @@ function setInitialStaticDeformation() {
 
     // 指の固定点が存在する場合のみ処理
     if (currentFixedPoint) {
-        u_current[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
-        u_previous[currentFixedPoint.x][currentFixedPoint.y] = currentThumbPressValue;
+        // 指の押さえ範囲を考慮して初期変位を設定
+        for (let i = max(0, currentFixedPoint.x - dynamicFingerPressRadius); i < min(GRID_WIDTH, currentFixedPoint.x + dynamicFingerPressRadius + 1); i++) {
+            for (let j = max(0, currentFixedPoint.y - dynamicFingerPressRadius); j < min(GRID_HEIGHT, currentFixedPoint.y + dynamicFingerPressRadius + 1); j++) {
+                // 中心からの距離が半径内であれば変位を固定
+                if (dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
+                    u_current[i][j] = currentThumbPressValue;
+                    u_previous[i][j] = currentThumbPressValue;
+                }
+            }
+        }
     }
 
     const RELAXATION_ITERATIONS = 300; // 緩和計算の繰り返し回数。大きいほど滑らかになるが重くなる。
@@ -413,10 +462,10 @@ function setInitialStaticDeformation() {
                 let y_center_dist = j - GRID_HEIGHT / 2;
                 let distance_to_boundary = sqrt(x_center_dist * x_center_dist + y_center_dist * y_center_dist);
 
-                // 円形境界の内側かつ、指の固定点ではない場合のみ緩和計算を行う
+                // 円形境界の内側かつ、指の固定範囲ではない場合のみ緩和計算を行う
                 if (distance_to_boundary < GRID_WIDTH / 2 - 2) { 
-                    if (currentFixedPoint && i === currentFixedPoint.x && j === currentFixedPoint.y) {
-                        temp_u[i][j] = currentThumbPressValue; // 指の点は常に固定
+                    if (currentFixedPoint && dist(i, j, currentFixedPoint.x, currentFixedPoint.y) <= dynamicFingerPressRadius) {
+                        temp_u[i][j] = currentThumbPressValue; // 指の押さえ範囲内は常に固定
                     } else {
                         // 周囲4点の平均を取る（単純な緩和法）
                         let sumNeighbors = 0;
